@@ -1,5 +1,7 @@
 #python drowniness_yawn.py --webcam webcam_index
 
+#Import all library 
+
 from scipy.spatial import distance as dist
 from imutils.video import VideoStream
 from imutils import face_utils
@@ -12,6 +14,7 @@ import dlib
 import cv2
 import os
 
+#Fuction When Alarm is Triggered
 def alarm(msg):
     global alarm_status
     global alarm_status2
@@ -19,7 +22,7 @@ def alarm(msg):
 
     while alarm_status:
         print('call')
-        s = 'espeak "'+msg+'"'
+        s = 'espeak "'+msg+'"' #Function to produce sound/to read the input of command sentences in alar function
         os.system(s)
 
     if alarm_status2:
@@ -29,6 +32,7 @@ def alarm(msg):
         os.system(s)
         saying = False
 
+#To calculate Eye Aspect Ratio (EAR) Threshold
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
     B = dist.euclidean(eye[2], eye[4])
@@ -39,6 +43,7 @@ def eye_aspect_ratio(eye):
 
     return ear
 
+#To track the eye
 def final_ear(shape):
     (lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
     (rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
@@ -52,6 +57,7 @@ def final_ear(shape):
     ear = (leftEAR + rightEAR) / 2.0
     return (ear, leftEye, rightEye)
 
+#To set size of normal lips
 def lip_distance(shape):
     top_lip = shape[50:53]
     top_lip = np.concatenate((top_lip, shape[61:64]))
@@ -65,37 +71,44 @@ def lip_distance(shape):
     distance = abs(top_mean[1] - low_mean[1])
     return distance
 
-
+#To setup the camera module
 ap = argparse.ArgumentParser()
 ap.add_argument("-w", "--webcam", type=int, default=0,
                 help="index of webcam on system")
 args = vars(ap.parse_args())
 
+
+#To set the value of EAR Threshold and Alarm Status
 EYE_AR_THRESH = 0.3
-EYE_AR_CONSEC_FRAMES = 30
+EYE_AR_CONSEC_FRAMES = 30 #Minnimum Frame value to trigger EAR
 YAWN_THRESH = 20
 alarm_status = False
 alarm_status2 = False
 saying = False
 COUNTER = 0
 
+#Loading predictor and Detector / to Calibrate the eye or mouth
 print("-> Loading the predictor and detector...")
 #detector = dlib.get_frontal_face_detector()
 detector = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")    #Faster but less accurate
 predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
 
-
+#To starting video stream 
 print("-> Starting Video Stream")
 vs = VideoStream(src=args["webcam"]).start()
-#vs= VideoStream(usePiCamera=True).start()       //For Raspberry Pi
+#vs= VideoStream(usePiCamera=True).start()       //For Raspberry Pi 
 time.sleep(1.0)
 
+#The function will looping infinite 
 while True:
 
+    #To set camera video frame
     frame = vs.read()
     frame = imutils.resize(frame, width=450)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+    
+    #Function To detect face 
     #rects = detector(gray, 0)
     rects = detector.detectMultiScale(gray, scaleFactor=1.1, 
 		minNeighbors=5, minSize=(30, 30),
@@ -107,14 +120,17 @@ while True:
         
         shape = predictor(gray, rect)
         shape = face_utils.shape_to_np(shape)
-
+        
+        #Eye will be final EAR
         eye = final_ear(shape)
         ear = eye[0]
         leftEye = eye [1]
         rightEye = eye[2]
 
+        #To determine the lip
         distance = lip_distance(shape)
 
+        #To draw circle shape in eye
         leftEyeHull = cv2.convexHull(leftEye)
         rightEyeHull = cv2.convexHull(rightEye)
         cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
@@ -123,10 +139,11 @@ while True:
         lip = shape[48:60]
         cv2.drawContours(frame, [lip], -1, (0, 255, 0), 1)
 
+        #Programming Logic Part
         if ear < EYE_AR_THRESH:
             COUNTER += 1
 
-            if COUNTER >= EYE_AR_CONSEC_FRAMES:
+            if COUNTER >= EYE_AR_CONSEC_FRAMES: #Able to change the value in order to make Alarm trigger faster
                 if alarm_status == False:
                     alarm_status = True
                     t = Thread(target=alarm, args=('wake up sir',))
@@ -135,7 +152,7 @@ while True:
 
                 cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
+                                                                        # <-- Recomendation place to add UDP Coding program (to send EAR data to othe program)
         else:
             COUNTER = 0
             alarm_status = False
